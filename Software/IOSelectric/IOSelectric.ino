@@ -1,6 +1,6 @@
 /*
   
-  I/O Selectric Serial Interface v1.0 2013-03-16
+  I/O Selectric Serial Interface v1.1 2013-03-18
   
   (c) 2013 L J Wilkinson
  
@@ -43,10 +43,16 @@
   pull-up (e.g. 20mA / 250R) is suggested in place of the internal pull-ups of
   the Arduino.
   
+  V1.1
+  Re-work to remove String objects
+  Add Min/Max times to statistics
+  Remove superfluous debugging printlns
+  Fix various timeouts and stat calcs
+  Add check for previous cycle complete at start of print operation
   
  */
-#define vers "v1.0"
-#define date "2013-03-16"
+#define vers "v1.1"
+#define date "2013-03-18"
 
 // Bit rate of Serial1 port (NOT the monitor port)
 #define externalPortRate 9600
@@ -106,27 +112,27 @@
 
 /* Print & operation cycle timeouts, in milliseconds */
 #define TO_CHAR_Start   100 // SOL to C2 opening
-#define TO_CHAR_Finish  200 // SOL to C1 & C2 closing
+#define TO_CHAR_Finish  500 // SOL to C1 & C2 closing
 
 #define TO_SP_Start  100 // SOL to C5 opening
-#define TO_SP_Finish 200 // SOL to C5 closing
+#define TO_SP_Finish 500 // SOL to C5 closing
 
-#define TO_CR_Start  100 // SOL to C6 closing
-#define TO_CR_Finish 500 // SOL to C6 closing
+#define TO_CR_Start  100 // SOL to C6 opening
+#define TO_CR_Finish 1000 // SOL to C6 closing
 
 #define TO_INDEX_Start  100 // SOL to C6 closing
-#define TO_INDEX_Finish 200 // SOL to C6 closing
+#define TO_INDEX_Finish 500 // SOL to C6 closing
 
 #define TO_BSP_Start  100 // SOL to C5 opening
-#define TO_BSP_Finish 200 // SOL to C5 closing
+#define TO_BSP_Finish 500 // SOL to C5 closing
 
 #define TO_TAB_Start  100 // SOL to C5 opening
-#define TO_TAB_Finish 500 // SOL to C5 closing
+#define TO_TAB_Finish 1000 // SOL to C5 closing
 
 #define TO_UC_Start  100 // SOL to C3 opening
-#define TO_UC_Finish 200 // SOL to C3 closing
+#define TO_UC_Finish 500 // SOL to C3 closing
 #define TO_LC_Start  100 // SOL to C4 opening
-#define TO_LC_Finish 200 // SOL to C4 closing
+#define TO_LC_Finish 500 // SOL to C4 closing
 
 #define TO_LOCK  500  // SOL to Keyboard Mode closing
 #define TO_UNLOCK 500 // SOL to Keyboard Mode opening
@@ -272,8 +278,12 @@ int inputBufferOutPtr = 0;
 unsigned long stats_cycles[numStats];
 unsigned long stats_startTimeouts[numStats];
 unsigned long stats_finishTimeouts[numStats];
-unsigned long stats_totalStartTime[numStats]; // milliseconds
-unsigned long stats_totalFinishTime[numStats]; // milliseconds
+unsigned long stats_totalStartTime[numStats]; // milliseconds total
+unsigned long stats_minStartTime[numStats]; // milliseconds
+unsigned long stats_maxStartTime[numStats]; // milliseconds
+unsigned long stats_totalFinishTime[numStats]; // milliseconds total
+unsigned long stats_minFinishTime[numStats]; // milliseconds
+unsigned long stats_maxFinishTime[numStats]; // milliseconds
 float stats_averageCurrent[numStats];
 float stats_averageCurrent_T2;
 float stats_averageCurrent_CK;
@@ -290,13 +300,13 @@ unsigned long stats_cycles_R2;
 unsigned long stats_cycles_R2A;
 unsigned long stats_cycles_R5;
 
-// For rembering where the print carriage is
+// For remembering where the print carriage is
 boolean atLeftColumn = false;
 boolean justDoneReturn = false;
 
 // Status switch handling
 boolean statusSwitchPressed = false;
-int statusSwitchPressTime = 0;
+unsigned long statusSwitchPressTime = 0;
 
 void setup() {
   // initialize both serial ports:
@@ -397,7 +407,7 @@ void loop() {
   }
   else {
   // Nothing to do
-    if (shifted()) {
+    if (locked() && shifted()) {
       shiftDown();
     }
     unlockKeyboard();
@@ -430,7 +440,7 @@ void loop() {
 boolean atEOL() {
   if (digitalRead(C_EOL_NO)==C_CLOSED) 
   {
-    Serial.println("EOL");
+    Serial.print("EOL @"); Serial.println(millis());
     return true;
   }
   return false;
@@ -443,26 +453,34 @@ void lockKeyboard() {
   float current;
   int stats = stats_lock;
   unsigned long start = millis();
-  int TO = start + TO_LOCK;
+  unsigned long TO = start + TO_LOCK;
   if (locked())
     return;
-  Serial.println("Locking kbd");
   digitalWrite(SOL_LOCK,SOL_ON);
   checkDelay(10);
   while (!locked()) {
     checkSerial();
     if (millis()>TO) {
-      stats_startTimeouts[stats]++;
-      stats = -1;
-      Serial.println("Lock timeout");
+      Serial.print("Lock timeout @"); Serial.println(millis());
+      if (stats>=0) {
+        stats_startTimeouts[stats]++;
+        stats = -1;
+      }
       break;
     }
-  if (stats>0) {
+  }
+  if (stats>=0) {
+    unsigned long time = millis()-start;
     current = solenoidCurrent();
-    stats_totalStartTime[stats] += (millis()-start);
     stats_averageCurrent[stats] = (stats_averageCurrent[stats]*stats_cycles[stats]+current)/(stats_cycles[stats]+1);
-    stats_cycles[stats]++;
+    if ((stats_cycles[stats]==0) || (time<stats_minStartTime[stats])) {
+      stats_minStartTime[stats] = time;
     }
+    if ((stats_cycles[stats]==0) || (time>stats_maxStartTime[stats])) {
+      stats_maxStartTime[stats] = time;
+    }
+    stats_totalStartTime[stats] += time;
+    stats_cycles[stats]++;
   }
 }
 
@@ -475,20 +493,29 @@ void unlockKeyboard() {
   int TO = start + TO_UNLOCK;
   if (!locked())
     return;
-  Serial.println("Unlocking kbd");
   digitalWrite(SOL_LOCK,SOL_OFF);
   checkDelay(10);
   while (locked()) {
     checkSerial();
     if (millis()>TO) {
-      stats_finishTimeouts[stats]++;
-      stats = -1;
-      Serial.println("Unlock timeout");
+      Serial.print("Unlock timeout @"); Serial.println(millis());
+      if (stats>=0) {
+        stats_finishTimeouts[stats]++;
+        stats = -1;
+      }
       break;
     }
   }
-  if (stats>0) {
-    stats_totalFinishTime[stats] += (millis()-start);
+  if (stats>=0) {
+    unsigned long time = millis()-start;
+    // Note check for cycles <=1 to force min & max on first unlock
+    if ((stats_cycles[stats]<=1) || (time<stats_minFinishTime[stats])) {
+      stats_minFinishTime[stats] = time;
+    }
+    if ((stats_cycles[stats]<=1) || (time>stats_maxFinishTime[stats])) {
+      stats_maxFinishTime[stats] = time;
+    }
+    stats_totalFinishTime[stats] += time;
   }
 }
 
@@ -512,10 +539,9 @@ float solenoidCurrent() {
 void printCharacter(char ch)
 {
   float current;
-  unsigned long start = millis();
-  unsigned long TO_1 = start + TO_CHAR_Start;
-  unsigned long TO_2 = start + TO_CHAR_Finish;
-  int stats = stats_char;
+  unsigned long start,TO_1,TO_2;
+  unsigned long time;
+  int stats;
   // Check if printable
   int code = correspondence[ch & 0x7f];
   if (code==0)
@@ -523,19 +549,6 @@ void printCharacter(char ch)
   // Check that we are allowed to print
   if (atEOL())
     return;
-  // Wait for completion of previous cycle (C2 & C1 closed)
-  while ((digitalRead(C_C2_6_NC)==C_OPEN) || (digitalRead(C_C1_NC)==C_OPEN)) {
-    checkSerial();
-    if (millis()>TO_1) {
-      if (stats>=0) {
-        Serial.println("C1 and C2 not closed prior to printing");
-        stats_finishTimeouts[stats]++;
-        stats = -1;
-      }
-    }
-  }
-  // No longer at left-hand column (if we were)
-  atLeftColumn = false;
   // Check for shift change
   // "." and "," (dot and comma) are repeated on both UC and LC so no need to check shift for these
   // This may not be the case for all type elements
@@ -545,6 +558,24 @@ void printCharacter(char ch)
     }
     else {
       shiftDown();
+    }
+  }
+  start = millis();
+  TO_1 = start + TO_CHAR_Start;
+  TO_2 = start + TO_CHAR_Finish;
+  stats = stats_char;
+  // Check for completion of previous cycle (C2 & C1 closed)
+  while ((digitalRead(C_C2_6_NC)==C_OPEN) || (digitalRead(C_C1_NC)==C_OPEN)) {
+    checkSerial();
+    if (millis()>TO_1) {
+      if (stats>=0) {
+        Serial.print("C1 and C2 not closed prior to printing @"); Serial.println(millis());
+        if (stats>=0) {
+          stats_finishTimeouts[stats]++;
+          stats = -1;
+        }
+        break;
+      }
     }
   }
   // Fire solenoids
@@ -557,21 +588,30 @@ void printCharacter(char ch)
   digitalWrite(SOL_R5,(code & CORR_R5)?SOL_ON:SOL_OFF);
   // Debounce delay
   checkDelay(10);
+  // No longer at left-hand column (if we were)
+  atLeftColumn = false;
 
   // Wait for start (C2)
   while (digitalRead(C_C2_6_NC)==C_CLOSED) {
     checkSerial();
     if (millis()>TO_1) {
+      Serial.print("Timed out waiting for C2 to open @"); Serial.println(millis());
       if (stats>=0) {
         stats_startTimeouts[stats]++;
         stats = -1;
-        Serial.println("Timed out waiting for C2 to open");
-        break;
       }
+      break;
     }
   }
   if (stats>=0) {
-    stats_totalStartTime[stats] += (millis()-start);
+    time = millis()-start;
+    if ((stats_cycles[stats]==0) || (time<stats_minStartTime[stats])) {
+      stats_minStartTime[stats] = time;
+    }
+    if ((stats_cycles[stats]==0) || (time>stats_maxStartTime[stats])) {
+      stats_maxStartTime[stats] = time;
+    }
+    stats_totalStartTime[stats] += time;
   }
   // Snapshot current in mA
   current = solenoidCurrent();
@@ -594,15 +634,23 @@ void printCharacter(char ch)
   while ((digitalRead(C_C2_6_NC)==C_OPEN) || (digitalRead(C_C1_NC)==C_OPEN)) {
     checkSerial();
     if (millis()>TO_2) {
+      Serial.print("Timed out waiting for C1 and C2 to close @"); Serial.println(millis());
       if (stats>=0) {
-        Serial.println("Timed out waiting for C1 and C2 to close");
         stats_finishTimeouts[stats]++;
         stats = -1;
       }
+      break;
     }
   }
   if (stats>=0) {
-    stats_totalFinishTime[stats] += (millis()-start);
+    time = millis()-start;
+    if ((stats_cycles[stats]==0) || (time<stats_minFinishTime[stats])) {
+      stats_minFinishTime[stats] = time;
+    }
+    if ((stats_cycles[stats]==0) || (time>stats_maxFinishTime[stats])) {
+      stats_maxFinishTime[stats] = time;
+    }
+    stats_totalFinishTime[stats] += time;
     // Calculate average current per solenoid
     int numSolenoids =
             ((code & CORR_T1)?1:0) +
@@ -644,6 +692,8 @@ void printCharacter(char ch)
     }
     stats_cycles[stats]++;
   }
+  // Debounce delay
+  checkDelay(10);
 }
 
 boolean shifted()
@@ -672,6 +722,7 @@ void printControl(int ch)
   }
   switch (ch) {
     case 0x20:
+      atLeftColumn = false;
       // Fire SP solenoid
       if (!atEOL()) {
         waitForC(SOL_SP,stats_sp,TO_SP_Start,TO_SP_Finish);
@@ -708,6 +759,7 @@ void printControl(int ch)
 #endif
 #ifdef SOL_TAB
     case 0x09:
+        atLeftColumn = false;
         // Fire TAB solenoid
         if (!atEOL()) {
           waitForC(SOL_TAB,-1,TO_TAB_Start,TO_TAB_Finish);
@@ -745,19 +797,21 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
   unsigned long start = millis();
   unsigned long TO_1 = start + start_to;
   unsigned long TO_2 = start + finish_to;
+  unsigned long time;
   
   // Wait for completion of previous cycle (C2-6 & C1 closed)
   while ((digitalRead(C_C2_6_NC)==C_OPEN) || (digitalRead(C_C1_NC)==C_OPEN)) {
     checkSerial();
     if (millis()>TO_1) {
+      Serial.print("C1 and C2-6 not closed prior to printing @"); Serial.println(millis());
       if (stats>=0) {
-        Serial.println("C1 and C2-6 not closed prior to printing");
         stats_finishTimeouts[stats]++;
         stats = -1;
       }
+      break;
     }
   }
-  
+
   digitalWrite(solenoid,SOL_ON);
   // Debounce delay
   checkDelay(10);
@@ -766,16 +820,23 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
   while (digitalRead(C_C2_6_NC)==C_CLOSED) {
     checkSerial();
     if (millis()>TO_1) {
+      Serial.print("Timed out waiting for C2-6 to open @"); Serial.println(millis());
       if (stats>=0) {
-        Serial.println("Timed out waiting for C2-6 to open");
         stats_startTimeouts[stats]++;
         stats = -1;
-        break;
       }
+      break;
     }
   }
   if (stats>=0) {
-    stats_totalStartTime[stats] += (millis()-start);
+    time = millis()-start;
+    if ((stats_cycles[stats]==0) || (time<stats_minStartTime[stats])) {
+      stats_minStartTime[stats] = time;
+    }
+    if ((stats_cycles[stats]==0) || (time>stats_maxStartTime[stats])) {
+      stats_maxStartTime[stats] = time;
+    }
+    stats_totalStartTime[stats] += time;
   }
   // Snapshot current in mA
   current = solenoidCurrent();
@@ -788,16 +849,16 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
   // Debounce delay
   checkDelay(10);
   
-  // Wait for Control to finish (C2-6) ("CR interlock" for CR?)
+  // Wait for Control to finish (C2-6)
   while (digitalRead(C_C2_6_NC)==C_OPEN) {
     checkSerial();
     if (millis()>TO_2) {
+      Serial.print("Timed out waiting for C2-6 to close @"); Serial.println(millis());
       if (stats>=0) {
-        Serial.println("Timed out waiting for C2-6 to close");
         stats_finishTimeouts[stats]++;
         stats = -1;
-        break;
       }
+      break;
     }
   }
   // For CR and TAB, wait for interlock to close
@@ -806,22 +867,38 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
 #else
   if (solenoid == SOL_CR) {
 #endif    
+//    Serial.print("CRTABNC "); Serial.print(inputState(C_CRTAB_NC));
+//    Serial.print("CRTABNO "); Serial.print(inputState(C_CRTAB_NO));
+//    Serial.println();
     checkDelay(10);
-    while (digitalRead(C_CRTAB_NC)==C_OPEN) {
+    while ((digitalRead(C_CRTAB_NC)==C_OPEN) || (digitalRead(C_CRTAB_NO)==C_CLOSED)) {
+//      Serial.print("CRTABNC "); Serial.print(inputState(C_CRTAB_NC));
+//      Serial.print("CRTABNO "); Serial.print(inputState(C_CRTAB_NO));
       checkSerial();
       if (millis()>TO_2) {
+        Serial.print("Timed out waiting for Return or Tab @"); Serial.println(millis());
         if (stats>=0) {
           stats_finishTimeouts[stats]++;
           stats = -1;
         }
+        break;
       }
     }
+//    Serial.print("CRTABNC "); Serial.print(inputState(C_CRTAB_NC));
+//    Serial.print("CRTABNO "); Serial.print(inputState(C_CRTAB_NO));
   }
   if (stats>=0) {
+    time = millis()-start;
+    if ((stats_cycles[stats]==0) || (time<stats_minFinishTime[stats])) {
+      stats_minFinishTime[stats] = time;
+    }
+    if ((stats_cycles[stats]==0) || (time>stats_maxFinishTime[stats])) {
+      stats_maxFinishTime[stats] = time;
+    }
+    stats_totalFinishTime[stats] += time;
     if (locked()) {
       current -= stats_averageCurrent[stats_lock];
     }
-    stats_totalFinishTime[stats] += (millis()-start);
     stats_averageCurrent[stats] = (stats_averageCurrent[stats]*stats_cycles[stats]+current)/(stats_cycles[stats]+1);
     stats_cycles[stats]++;
   }
@@ -835,187 +912,161 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
  */
 void printStats()
 {
-  #define statsStringLength 100
-  String stats = "";
-  char statsString[statsStringLength];
+  #define maxStatsStringLength 100
+  char str[maxStatsStringLength];
+  char num[10];
+  str[0]='\0';
   int cps10 = 10000 / (stats_totalFinishTime[stats_char]/stats_cycles[stats_char]);
   if (printStatsToTypewriter)
   {
     lockKeyboard();
-    printControl('\r');
+    if (!atLeftColumn)
+      printControl('\r');
   }
 
   // Print everything
-  stats = "!\"#$%&'()*+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]`abcdefghijklmnopqrstuvwxyz~";
-  stats.toCharArray(statsString,statsStringLength);
-  Serial.println(statsString);
+  strcat(str,"!\"#$%&'()*+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]`abcdefghijklmnopqrstuvwxyz~");
+  Serial.println(str);
   if (printStatsToTypewriter)
-    printChars(statsString);
+    printChars(str);
 
   // Total characters printed, average start (ms), average finish (ms), average rate (cps): CH NNNN SSSms FFFms RRRcps
-  stats = "CH:";
-  stats += stats_cycles[stats_char];
-  stats += " S=";
-  if (stats_cycles[stats_char]>0)
-    stats += stats_totalStartTime[stats_char]/stats_cycles[stats_char];
-  else
-    stats += "-";
-  stats += "ms F=";
-  if (stats_cycles[stats_char]>0)
-    stats += stats_totalFinishTime[stats_char]/stats_cycles[stats_char];
-  else
-    stats += "-";
-  stats += "ms CPS=";
+  strcpy(str,"CH:  ");
+  stats1(str,stats_char);
+  strcat(str," CPS=");
   if (stats_cycles[stats_char]>0) {
-    stats += cps10 / 10;
-    stats += '.';
-    stats += cps10 % 10;
+    sprintf(num,"%2i",cps10/10);
+    strcat(str,num);
+    strcat(str,".");
+    sprintf(num,"%1i",cps10 % 10);
+    strcat(str,num);
   }
   else
-    stats += "-";
-  stats += " STO=";
-  stats += stats_startTimeouts[stats_char];
-  stats += " FTO=";
-  stats += stats_finishTimeouts[stats_char];
-  stats += " Iavg T2:";
-  stats += (int)stats_averageCurrent_T2;
-  stats += " CK:";
-  stats += (int)stats_averageCurrent_CK;
-  stats += " T1:";
-  stats += (int)stats_averageCurrent_T1;
-  stats += " R2A:";
-  stats += (int)stats_averageCurrent_R2A;
-  stats += " R1:";
-  stats += (int)stats_averageCurrent_R1;
-  stats += " R2:";
-  stats += (int)stats_averageCurrent_R2;
-  stats += " R5:";
-  stats += (int)stats_averageCurrent_R5;
-  stats += "mA";
-  stats.toCharArray(statsString,statsStringLength);
-  Serial.println(statsString);
+    strcat(str,"-");
+  Serial.println(str);
   if (printStatsToTypewriter)
-    printChars(statsString);
+    printChars(str);
 
-  // Total UC shift, average start, average finish: UC NNNN SSSms FFFms
-  stats = "UC:";
-  stats += stats_cycles[stats_uc];
-  stats += " S=";
-  if (stats_cycles[stats_uc]>0)
-    stats += stats_totalStartTime[stats_uc]/stats_cycles[stats_uc];
-  else
-    stats += "-";
-  stats += "ms F=";
-  if (stats_cycles[stats_uc]>0)
-    stats += stats_totalFinishTime[stats_uc]/stats_cycles[stats_uc];
-  else
-    stats += "-";
-  stats += "ms STO=";
-  stats += stats_startTimeouts[stats_uc];
-  stats += " FTO=";
-  stats += stats_finishTimeouts[stats_uc];
-  stats += " Iavg=";
-  stats += (int)stats_averageCurrent[stats_uc];
-  stats += "mA";
-
-  // Total LC shift, average start, average finish: LC NNNN SSSms FFFms
-  stats += "  LC:";
-  stats += stats_cycles[stats_lc];
-  stats += " S=";
-  if (stats_cycles[stats_lc]>0)
-    stats += stats_totalStartTime[stats_lc]/stats_cycles[stats_lc];
-  else
-    stats += "-";
-  stats += "ms F=";
-  if (stats_cycles[stats_lc]>0)
-    stats += stats_totalFinishTime[stats_lc]/stats_cycles[stats_lc];
-  else
-    stats += "-";
-  stats += "ms STO=";
-  stats += stats_startTimeouts[stats_lc];
-  stats += " FTO=";
-  stats += stats_finishTimeouts[stats_lc];
-  stats += " Iavg=";
-  stats += (int)stats_averageCurrent[stats_lc];
-  stats += "mA";
-  stats.toCharArray(statsString,statsStringLength);
-  Serial.println(statsString);
+  strcpy(str,"          Iavg T2:");
+  sprintf(num,"%3i",(int)stats_averageCurrent_T2);
+  strcat(str,num);
+  strcat(str," CK:");
+  sprintf(num,"%3i",(int)stats_averageCurrent_CK);
+  strcat(str,num);
+  strcat(str," T1:");
+  sprintf(num,"%3i",(int)stats_averageCurrent_T1);
+  strcat(str,num);
+  strcat(str," R2A:");
+  sprintf(num,"%3i",(int)stats_averageCurrent_R2A);
+  strcat(str,num);
+  strcat(str," R1:");
+  sprintf(num,"%3i",(int)stats_averageCurrent_R1);
+  strcat(str,num);
+  strcat(str," R2:");
+  sprintf(num,"%3i",(int)stats_averageCurrent_R2);
+  strcat(str,num);
+  strcat(str," R5:");
+  sprintf(num,"%3i",(int)stats_averageCurrent_R5);
+  strcat(str,num);
+  strcat(str,"mA");
+  Serial.println(str);
   if (printStatsToTypewriter)
-    printChars(statsString);
+    printChars(str);
 
-  // Total CR, average start, total LF, average start, average finish: CR NNNN SSSms  LF NNNN SSSms FFFms
-  stats = "CR:";
-  stats += stats_cycles[stats_cr];
-  stats += " S=";
-  if (stats_cycles[stats_cr]>0)
-    stats += stats_totalStartTime[stats_cr]/stats_cycles[stats_cr];
-  else
-    stats += "-";
-  stats += "ms F=";
-  if (stats_cycles[stats_cr]>0)
-    stats += stats_totalFinishTime[stats_cr]/stats_cycles[stats_cr];
-  else
-    stats += "-";
-  stats += "ms STO=";
-  stats += stats_startTimeouts[stats_cr];
-  stats += " FTO=";
-  stats += stats_finishTimeouts[stats_cr];
-  stats += " Iavg=";
-  stats += (int)stats_averageCurrent[stats_cr];
-  stats += "mA";
+   // SP stats
+  strcpy(str,"SP:  ");
+  stats1(str,stats_sp);
+  Serial.println(str);
+  if (printStatsToTypewriter)
+    printChars(str);
+    
+  // UC, LC shift stats
+  strcpy(str,"UC:  ");
+  stats1(str,stats_uc);
+  Serial.println(str);
+  if (printStatsToTypewriter)
+    printChars(str);
 
-  stats += "  LF:";
-  stats += stats_cycles[stats_lf];
-  stats += " S=";
-  if (stats_cycles[stats_lf]>0)
-    stats += stats_totalStartTime[stats_lf]/stats_cycles[stats_lf];
-  else
-    stats += "-";
-  stats += "ms F=";
-  if (stats_cycles[stats_lf]>0)
-    stats += stats_totalFinishTime[stats_lf]/stats_cycles[stats_lf];
-  else
-    stats += "-";
-  stats += "ms STO=";
-  stats += stats_startTimeouts[stats_lf];
-  stats += " FTO=";
-  stats += stats_finishTimeouts[stats_lf];
-  stats += " Iavg=";
-  stats += (int)stats_averageCurrent[stats_lf];
-  stats += "mA";
-  stats.toCharArray(statsString,statsStringLength);
-  Serial.println(statsString);
+  strcpy(str,"LC:  ");
+  stats1(str,stats_lc);
+  Serial.println(str);
+  if (printStatsToTypewriter)
+    printChars(str);
+
+  // CR, LF stats
+  strcpy(str,"CR:  ");
+  stats1(str,stats_cr);
+  Serial.println(str);
   if (printStatsToTypewriter)
   {
-    printChars(statsString);
+    printChars(str);
   }
+
+  strcpy(str,"LF:  ");
+  stats1(str,stats_lf);
+  Serial.println(str);
+  if (printStatsToTypewriter)
+  {
+    printChars(str);
+  }
+  
   // Total LOCK, average finish: LOCK NNNN SSSms
-  stats = "LOCK:";
-  stats += stats_cycles[stats_lock];
-  stats += " L=";
-  if (stats_cycles[stats_lock]>0)
-    stats += stats_totalStartTime[stats_lock]/stats_cycles[stats_lock];
-  else
-    stats += "-";
-  stats += "ms U=";
-  if (stats_cycles[stats_lf]>0)
-    stats += stats_totalFinishTime[stats_lock]/stats_cycles[stats_lock];
-  else
-    stats += "-";
-  stats += "ms LTO=";
-  stats += stats_startTimeouts[stats_lock];
-  stats += " UTO=";
-  stats += stats_finishTimeouts[stats_lock];
-  stats += " Iavg=";
-  stats += (int)stats_averageCurrent[stats_lock];
-  stats += "mA";
-  stats.toCharArray(statsString,statsStringLength);
-  Serial.println(statsString);
+  strcpy(str,"LOCK:");
+  stats1(str,stats_lock);
+  Serial.println(str);
   if (printStatsToTypewriter)
   {
-    printChars(statsString);
+    printChars(str);
+  }
+  
+  // Finished printing stats
+  if (printStatsToTypewriter)
+  {
     unlockKeyboard();
   }
+}
+
+char* stats1(char* str, int stat) {
+  char num[10];
+  sprintf(num,"%6i",stats_cycles[stat]);
+  strcat(str,num);
+  if (stats_cycles[stat]>0) {
+    strcat(str," S:Avg=");
+    sprintf(num,"%3i",stats_totalStartTime[stat]/stats_cycles[stat]);
+    strcat(str,num);
+    strcat(str,"ms Min=");
+    sprintf(num,"%3i",stats_minStartTime[stat]);
+    strcat(str,num);
+    strcat(str,"ms Max=");
+    sprintf(num,"%3i",stats_maxStartTime[stat]);
+    strcat(str,num);
+    strcat(str,"ms F:Avg=");
+    sprintf(num,"%3i",stats_totalFinishTime[stat]/stats_cycles[stat]);
+    strcat(str,num);
+    strcat(str,"ms Min=");
+    sprintf(num,"%3i",stats_minFinishTime[stat]);
+    strcat(str,num);
+    strcat(str,"ms Max=");
+    sprintf(num,"%3i",stats_maxFinishTime[stat]);
+    strcat(str,num);
+    strcat(str,"ms");
+  }
+  else {
+    strcat(str," S:(none) F:(none)");
+  }
+  strcat(str," STO=");
+  sprintf(num,"%3i",stats_startTimeouts[stat]);
+  strcat(str,num);
+  strcat(str," FTO=");
+  sprintf(num,"%3i",stats_finishTimeouts[stat]);
+  strcat(str,num);
+  if (stat != stats_char) {
+    strcat(str," Iavg=");
+    sprintf(num,"%3i",(int)stats_averageCurrent[stat]);
+    strcat(str,num);
+    strcat(str,"mA");
+  }
+  return str;
 }
 
 /*
@@ -1028,7 +1079,7 @@ void printChars(char* buff) {
 }
 
 /*
-  The following routines implement a simple input buffer
+  The following routines implement a simple input FIFO buffer
  */
 int inputBufferContents() {
   noInterrupts();
@@ -1079,49 +1130,53 @@ void checkDelay(int del)
   for (int i=del; i--; i>0) {
     delay(1);
     checkSerial();
-  }  
+  }
 }
 
 /*
   Display the state of all the inputs
  */
 void displayInputs() {
-  String str = "";
-  str += inputState("C1 NC  ",C_C1_NC);
-  str += inputState("C1_NO  ",C_C1_NO);
-  str += inputState("C2_6_NC",C_C2_6_NC);
-  str += inputState("C2_6_NO",C_C2_6_NO);
-  str += inputState("CRTABNC",C_CRTAB_NC);
-  str += inputState("CRTABNO",C_CRTAB_NO);
-  str += inputState("LC     ",C_LC);
-  str += inputState("UC     ",C_UC);
-  str += inputState("EOL_NC ",C_EOL_NC);
-  str += inputState("EOL_NO ",C_EOL_NO);
-  str += inputState("LOCK_NC",C_LOCK_NC);
-  str += inputState("LOCK_NO",C_LOCK_NO);
-  str += inputState("K PAR  ",K_PAR);
-  str += inputState("K T2   ",K_T2);
-  str += inputState("K CK   ",K_CK);
-  str += inputState("K T1   ",K_T1);
-  str += inputState("K R2A  ",K_R2A);
-  str += inputState("K R1   ",K_R1);
-  str += inputState("K R2   ",K_R2);
-  str += inputState("K R5   ",K_R5);
-  str += inputState("K TAB  ",K_TAB);
-  str += inputState("K SP   ",K_SP);
-  str += inputState("K BSP  ",K_BSP);
-  str += inputState("K CR   ",K_CR);
-  str += inputState("K LF   ",K_LF);
-  str += inputState("K UC   ",K_UC);
-  str += inputState("K LC   ",K_LC);
+  char str[410]; // Up to 15 per contact * 27 + final null = 406
+  str[0]='\0';
+  // 12 printer contacts
+  strcat(str,"C1 NC  "); strcat(str,inputState(C_C1_NC));
+  strcat(str,"C1 NO  "); strcat(str,inputState(C_C1_NO));
+  strcat(str,"C2_6_NC"); strcat(str,inputState(C_C2_6_NC));
+  strcat(str,"C2_6_NO"); strcat(str,inputState(C_C2_6_NO));
+  strcat(str,"CRTABNC"); strcat(str,inputState(C_CRTAB_NC));
+  strcat(str,"CRTABNO"); strcat(str,inputState(C_CRTAB_NO));
+  strcat(str,"LC     "); strcat(str,inputState(C_LC));
+  strcat(str,"UC     "); strcat(str,inputState(C_UC));
+  strcat(str,"EOL_NC "); strcat(str,inputState(C_EOL_NC));
+  strcat(str,"EOL_NC "); strcat(str,inputState(C_EOL_NO));
+  strcat(str,"LOCK_NC"); strcat(str,inputState(C_LOCK_NC));
+  strcat(str,"LOCK_NO"); strcat(str,inputState(C_LOCK_NO));
+  
+  // 15 keyboard contacts
+  strcat(str,"K PAR  "); strcat(str,inputState(K_PAR));
+  strcat(str,"K T2   "); strcat(str,inputState(K_T2));
+  strcat(str,"K CK   "); strcat(str,inputState(K_CK));
+  strcat(str,"K T1   "); strcat(str,inputState(K_T1));
+  strcat(str,"K R2A  "); strcat(str,inputState(K_R2A));
+  strcat(str,"K R1   "); strcat(str,inputState(K_R1));
+  strcat(str,"K R2   "); strcat(str,inputState(K_R2));
+  strcat(str,"K R5   "); strcat(str,inputState(K_R5));
+  strcat(str,"K TAB  "); strcat(str,inputState(K_TAB));
+  strcat(str,"K SP   "); strcat(str,inputState(K_SP));
+  strcat(str,"K BSP  "); strcat(str,inputState(K_BSP));
+  strcat(str,"K CR   "); strcat(str,inputState(K_CR));
+  strcat(str,"K LF   "); strcat(str,inputState(K_LF));
+  strcat(str,"K UC   "); strcat(str,inputState(K_UC));
+  strcat(str,"K LC   "); strcat(str,inputState(K_LC));
   Serial.print(str);
 }
 
-String inputState(char *name, int input) {
+char* inputState(int input) {
   if (digitalRead(input)==C_OPEN)
-    return (String)name + " OPEN\n";
+    return " OPEN\n";
   else
-    return (String)name + " CLOSED\n";
+    return " CLOSED\n";
 }
 
 
