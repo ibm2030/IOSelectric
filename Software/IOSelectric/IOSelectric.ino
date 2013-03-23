@@ -1,6 +1,6 @@
 /*
   
-  I/O Selectric Serial Interface v1.1 2013-03-18
+  I/O Selectric Serial Interface v1.2 2013-03-23
   
   (c) 2013 L J Wilkinson
  
@@ -50,24 +50,46 @@
   Fix various timeouts and stat calcs
   Add check for previous cycle complete at start of print operation
   
+  V1.2
+  Tidy up timeouts
+  Fix up correspondence coding table
+  Add cycle time stats
+  Add XON/XOFF and CTS/RTS handshaking
+  
  */
-#define vers "v1.1"
-#define date "2013-03-18"
+#define vers "v1.2"
+#define date "2013-03-23"
 
 // Bit rate of Serial1 port (NOT the monitor port)
-#define externalPortRate 9600
+#define externalPortRate 1200
+
+// Input buffer sizing
+#define INPUT_BUFFER_SIZE 2000
+#define HIGH_LIMIT 1800  // Send 'Stop' (XOFF / CTS off)
+#define LOW_LIMIT  1700  // Send 'Go' (XON / CTS on)
+
+// XON/XOFF handshaking
+#define XONXOFF true
+#define XON 0x11
+#define XOFF 0x13
+#define XONXOFFRATE 100  // ms between transmissions
+// RATE must be at least buffer margin / transmission rate
+
+// CTS/RTS handshaking (CTS for printing, RTS for sending)
+#define CTSRTS false
 
 // Whether to lock the keyboard while printing:
 #define LOCK_KEYBOARD true
 
 // Whether to send Monitor typing to the typewriter
-#define LOCAL_MODE true
+#define LOCAL_MODE false
 
 // Whether to send Monitor typing down the serial link
-#define REMOTE_MODE false
+#define REMOTE_MODE true
 
 // Whether to treat the LF character as an EOL
 #define TREAT_LF_AS_CR true
+
 
 // Whether a long press on the status button should also print the stats
 // summary on the typewriter (as well as on the monitor)
@@ -76,10 +98,12 @@
 /*
   Arduino Mega 2560 Reserved I/O
   0-1 Serial
+  13 LED  
+  14,15 Serial3
+  16,17 Serial2
   18,19 Serial1
   20-21 TWI
   50-53 SPI
-  13 LED  
  */
  
 /*
@@ -111,31 +135,33 @@
 #define  SOL_OFF  LOW
 
 /* Print & operation cycle timeouts, in milliseconds */
-#define TO_CHAR_Start   100 // SOL to C2 opening
-#define TO_CHAR_Finish  500 // SOL to C1 & C2 closing
+#define TO_CHAR_Start    50 // SOL to C2 opening
+#define TO_CHAR_Finish  200 // SOL to C1 & C2 closing
 
-#define TO_SP_Start  100 // SOL to C5 opening
-#define TO_SP_Finish 500 // SOL to C5 closing
+#define TO_SP_Start   50 // SOL to C5 opening
+#define TO_SP_Finish 200 // SOL to C5 closing
 
-#define TO_CR_Start  100 // SOL to C6 opening
+#define TO_CR_Start   50 // SOL to C6 opening
 #define TO_CR_Finish 1000 // SOL to C6 closing
 
-#define TO_INDEX_Start  100 // SOL to C6 closing
-#define TO_INDEX_Finish 500 // SOL to C6 closing
+#define TO_INDEX_Start   50 // SOL to C6 closing
+#define TO_INDEX_Finish 200 // SOL to C6 closing
 
-#define TO_BSP_Start  100 // SOL to C5 opening
-#define TO_BSP_Finish 500 // SOL to C5 closing
+#define TO_BSP_Start   50 // SOL to C5 opening
+#define TO_BSP_Finish 200 // SOL to C5 closing
 
-#define TO_TAB_Start  100 // SOL to C5 opening
+#define TO_TAB_Start    50 // SOL to C5 opening
 #define TO_TAB_Finish 1000 // SOL to C5 closing
 
-#define TO_UC_Start  100 // SOL to C3 opening
-#define TO_UC_Finish 500 // SOL to C3 closing
-#define TO_LC_Start  100 // SOL to C4 opening
-#define TO_LC_Finish 500 // SOL to C4 closing
+#define TO_UC_Start   50 // SOL to C3 opening
+#define TO_UC_Finish 200 // SOL to C3 closing
+#define TO_LC_Start   50 // SOL to C4 opening
+#define TO_LC_Finish 200 // SOL to C4 closing
 
-#define TO_LOCK  500  // SOL to Keyboard Mode closing
-#define TO_UNLOCK 500 // SOL to Keyboard Mode opening
+#define TO_LOCK  200  // SOL to Keyboard Mode closing
+#define TO_UNLOCK 200 // SOL to Keyboard Mode opening
+
+#define POST_SWITCH_DELAY 20  // Debounce delay after each switch activation
 
 /*  
   Contact input definitions:
@@ -207,6 +233,10 @@
 #define  CURRENT_VOLTAGE 1.1
 #define  CURRENT_RESISTOR 1.00
 
+// Hardware handshaking
+#define  CTS  50  // Out
+#define  RTS  51  // In
+
 // A switch to use for debugging purposes
 #define  SW_STATUS  48
 #define  SW_OFF HIGH
@@ -225,8 +255,6 @@
   0x00 means an unprintable character which is ignored
 
   Substitutions:
-  1 => l (lower case L) 0x45
-  ~ => (cent) 0xd8
   ` => (degree) 0xbe
  
   Missing from the type element (and ignored):
@@ -246,19 +274,17 @@ byte correspondence[128] =
 {
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 00-0F
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 10-1F
-0x00,0x3e,0x9c,0xdb,0xf5,0xfc,0xdd,0x1c,0xf0,0xd4,0xf9,0xaa,0x29,0x20,0x1a,0x25, // 20-2F  !"#$%&'()*+,-./
-0x54,0x45,0x7a,0x5b,0x75,0x7c,0x58,0x5d,0x79,0x70,0x8d,0x0d,0x00,0x2a,0x00,0xa5, // 30-3F 0123456789:;<=>?
-0xfa,0x19,0x40,0x49,0x6d,0x4c,0x0b,0x2f,0x64,0x38,0x0e,0x68,0x45,0x1f,0x4a,0x15, // 40-4F @ABCDEFGHIJKLMNO
-0x2c,0x08,0x3d,0x34,0x6e,0x6b,0x3b,0x10,0x4f,0x04,0x5e,0xff,0x00,0x7f,0x00,0xa0, // 50-5F PQRSTUVWXYZ[\]^_
-0xbe,0x99,0xc0,0xc9,0xed,0xcc,0x8b,0xaf,0xe4,0xb8,0x8e,0xe8,0xc5,0x9f,0xca,0x95, // 60-6F `abcdefghijklmno
-0xac,0x88,0xbd,0xb4,0xee,0xeb,0xbb,0x90,0xcf,0x84,0xde,0x00,0x00,0x00,0xd8,0x00  // 70-7F pqrstuvwxyz{|}~
+0x00,0xbe,0x9c,0x00,0xd8,0xa5,0xdd,0x1c,0xf0,0xd4,0xfa,0xff,0x29,0x20,0x1a,0xdb, // 20-2F  !"#$%&'()*+,-./
+0x54,0x7f,0x7a,0x5b,0x75,0x7c,0x58,0x5d,0x79,0x70,0x8d,0x0d,0x00,0x2a,0x00,0xaa, // 30-3F 0123456789:;<=>?
+0xf5,0x99,0xc0,0xc9,0xed,0xcc,0x8b,0xaf,0xe4,0xb8,0x8e,0xe8,0xc5,0x9f,0xca,0x95, // 40-4F @ABCDEFGHIJKLMNO
+0xac,0x88,0xbd,0xb4,0xee,0xeb,0xbb,0x90,0xcf,0x84,0xde,0xff,0x00,0x7f,0x00,0xa0, // 50-5F PQRSTUVWXYZ[\]^_
+0x3e,0x19,0x40,0x49,0x6d,0x4c,0x0b,0x2f,0x64,0x38,0x0e,0x68,0x45,0x1f,0x4a,0x15, // 60-6F `abcdefghijklmno
+0x2c,0x08,0x3d,0x34,0x6e,0x6b,0x3b,0x10,0x4f,0x04,0x5e,0x00,0x00,0x00,0x00,0x00  // 70-7F pqrstuvwxyz{|}~
 };
-
 
 /*
   Serial input buffering 
 */
-#define INPUT_BUFFER_SIZE 1000
 char inputBuffer[INPUT_BUFFER_SIZE];
 int inputBufferInPtr = 0;
 int inputBufferOutPtr = 0;
@@ -284,6 +310,9 @@ unsigned long stats_maxStartTime[numStats]; // milliseconds
 unsigned long stats_totalFinishTime[numStats]; // milliseconds total
 unsigned long stats_minFinishTime[numStats]; // milliseconds
 unsigned long stats_maxFinishTime[numStats]; // milliseconds
+unsigned long stats_totalCycleTime[numStats]; // milliseconds total
+unsigned long stats_minCycleTime[numStats]; // milliseconds
+unsigned long stats_maxCycleTime[numStats]; // milliseconds
 float stats_averageCurrent[numStats];
 float stats_averageCurrent_T2;
 float stats_averageCurrent_CK;
@@ -303,6 +332,11 @@ unsigned long stats_cycles_R5;
 // For remembering where the print carriage is
 boolean atLeftColumn = false;
 boolean justDoneReturn = false;
+
+// Handshaking
+#if XONXOFF
+unsigned long lastXonXoffSent;
+#endif
 
 // Status switch handling
 boolean statusSwitchPressed = false;
@@ -366,10 +400,24 @@ void setup() {
   pinMode(K_LF,INPUT_PULLUP);
   pinMode(K_UC,INPUT_PULLUP);
   pinMode(K_LC,INPUT_PULLUP);
+
+#ifdef CTS
+  pinMode(CTS,OUTPUT);
+  #ifdef CTSRTS
+    digitalWrite(CTS,LOW);  // Stop for now
+  #else
+    digitalWrite(CTS,HIGH); // Leave enabled
+  #endif
+#endif
+#ifdef RTS
+  pinMode(RTS,INPUT_PULLUP);
+#endif  
   
   pinMode(SW_STATUS,INPUT_PULLUP);
   
   analogReference(ANA_REF);
+  
+  for (int i=0;i<INPUT_BUFFER_SIZE;i++) inputBuffer[i]='!';
 
   Serial.print("I/O Selectric "); Serial.print(vers); Serial.print(" ");Serial.println(date);
 }
@@ -383,6 +431,7 @@ void loop() {
     int ch = getFromInputBuffer() & 0x7f;
     // Echo to Port 0  
     Serial.write(ch); 
+    // Print
     lockKeyboard();
     if (ch > 0x20)
       printCharacter(ch);
@@ -393,8 +442,14 @@ void loop() {
   else if (Serial.available()) {
     char ch = Serial.read();
 #if REMOTE_MODE    
-  // Send to channel serial port
-   Serial1.write(ch);
+    // Send to channel serial port
+#if CTSRTS
+    if (digitalRead(RTS)==HIGH) {
+      Serial1.write(ch);
+    }
+#else
+    Serial1.write(ch);
+#endif   
 #endif   
 #if LOCAL_MODE  
     // Use console as a typewriter:
@@ -410,8 +465,40 @@ void loop() {
     if (locked() && shifted()) {
       shiftDown();
     }
+#if CTSRTS
+    if (digitalRead(RTS)==HIGH) {
+      unlockKeyboard();
+    }
+    else {
+      lockKeyboard();
+    }
+#else
     unlockKeyboard();
+#endif    
   }
+  
+  // Check for XON/XOFF transmission
+  #if XONXOFF
+  if (millis()>(lastXonXoffSent + XONXOFFRATE)) {
+    if (inputBufferContents()>HIGH_LIMIT) {
+      Serial1.write((char)XOFF);
+    }
+    if (inputBufferContents()<LOW_LIMIT) {
+      Serial1.write((char)XON);
+    }
+    lastXonXoffSent = millis();
+  }
+  #endif
+  
+  // Check for CTS change
+  #if CTSRTS
+    if (inputBufferContents()>HIGH_LIMIT) {
+      digitalWrite(CTS,LOW);
+    }
+    if (inputBufferContents()<LOW_LIMIT) {
+      digitalWrite(CTS,HIGH);
+    }
+  #endif
   
   // Check for status printout request
   if (digitalRead(SW_STATUS)==SW_ON) {
@@ -457,7 +544,6 @@ void lockKeyboard() {
   if (locked())
     return;
   digitalWrite(SOL_LOCK,SOL_ON);
-  checkDelay(10);
   while (!locked()) {
     checkSerial();
     if (millis()>TO) {
@@ -482,6 +568,7 @@ void lockKeyboard() {
     stats_totalStartTime[stats] += time;
     stats_cycles[stats]++;
   }
+  checkDelay(POST_SWITCH_DELAY);
 }
 
 /*
@@ -494,7 +581,6 @@ void unlockKeyboard() {
   if (!locked())
     return;
   digitalWrite(SOL_LOCK,SOL_OFF);
-  checkDelay(10);
   while (locked()) {
     checkSerial();
     if (millis()>TO) {
@@ -517,6 +603,7 @@ void unlockKeyboard() {
     }
     stats_totalFinishTime[stats] += time;
   }
+  checkDelay(POST_SWITCH_DELAY);
 }
 
 /*
@@ -539,7 +626,7 @@ float solenoidCurrent() {
 void printCharacter(char ch)
 {
   float current;
-  unsigned long start,TO_1,TO_2;
+  unsigned long start,TO_1,TO_2,cycleStart;
   unsigned long time;
   int stats;
   // Check if printable
@@ -550,10 +637,10 @@ void printCharacter(char ch)
   if (atEOL())
     return;
   // Check for shift change
-  // "." and "," (dot and comma) are repeated on both UC and LC so no need to check shift for these
+  // "." and "," are repeated on both UC and LC so no need to check shift for these
   // This may not be the case for all type elements
-  if ((code!=0x29) && (code!=0x1a)) {
-    if ((code & CORR_SHIFT)==0) {
+  if ((code!=0x1a)|| (code!=0x29)) {
+    if ((code & CORR_SHIFT)!=0) {
       shiftUp();
     }
     else {
@@ -565,11 +652,14 @@ void printCharacter(char ch)
   TO_2 = start + TO_CHAR_Finish;
   stats = stats_char;
   // Check for completion of previous cycle (C2 & C1 closed)
-  while ((digitalRead(C_C2_6_NC)==C_OPEN) || (digitalRead(C_C1_NC)==C_OPEN)) {
+  if (digitalRead(C_C2_6_NC)==C_OPEN) {
+    Serial.print("C2 not closed prior to printing @"); Serial.println(millis());
+  }
+  while (digitalRead(C_C2_6_NC)==C_OPEN) {
     checkSerial();
     if (millis()>TO_1) {
       if (stats>=0) {
-        Serial.print("C1 and C2 not closed prior to printing @"); Serial.println(millis());
+        Serial.print("Timeout waiting for C2 n to close prior to printing @"); Serial.println(millis());
         if (stats>=0) {
           stats_finishTimeouts[stats]++;
           stats = -1;
@@ -587,7 +677,7 @@ void printCharacter(char ch)
   digitalWrite(SOL_R2A,(code & CORR_R2A)?SOL_ON:SOL_OFF);
   digitalWrite(SOL_R5,(code & CORR_R5)?SOL_ON:SOL_OFF);
   // Debounce delay
-  checkDelay(10);
+  checkDelay(POST_SWITCH_DELAY);
   // No longer at left-hand column (if we were)
   atLeftColumn = false;
 
@@ -603,6 +693,9 @@ void printCharacter(char ch)
       break;
     }
   }
+  
+  cycleStart = millis();
+  
   if (stats>=0) {
     time = millis()-start;
     if ((stats_cycles[stats]==0) || (time<stats_minStartTime[stats])) {
@@ -628,22 +721,26 @@ void printCharacter(char ch)
   digitalWrite(SOL_R2A,SOL_OFF);
   digitalWrite(SOL_R5,SOL_OFF);
   // Debounce delay
-  checkDelay(10);
+  checkDelay(POST_SWITCH_DELAY);
 
-  // Wait for completion (C2 & C1 closed)
-  while ((digitalRead(C_C2_6_NC)==C_OPEN) || (digitalRead(C_C1_NC)==C_OPEN)) {
+  // Wait for completion (C2 closed)
+  while (digitalRead(C_C2_6_NC)==C_OPEN) {
     checkSerial();
     if (millis()>TO_2) {
-      Serial.print("Timed out waiting for C1 and C2 to close @"); Serial.println(millis());
+      Serial.print("Timed out waiting for C2 to close @"); Serial.println(millis());
+      Serial.print("start=");Serial.println(start);
+      Serial.print("TO_2=");Serial.println(TO_2);
       if (stats>=0) {
         stats_finishTimeouts[stats]++;
         stats = -1;
       }
+      while (true) ;
       break;
     }
   }
   if (stats>=0) {
     time = millis()-start;
+    unsigned long cycleTime = millis()-cycleStart;
     if ((stats_cycles[stats]==0) || (time<stats_minFinishTime[stats])) {
       stats_minFinishTime[stats] = time;
     }
@@ -651,6 +748,13 @@ void printCharacter(char ch)
       stats_maxFinishTime[stats] = time;
     }
     stats_totalFinishTime[stats] += time;
+    if ((stats_cycles[stats]==0) || (cycleTime<stats_minCycleTime[stats])) {
+      stats_minCycleTime[stats] = cycleTime;
+    }
+    if ((stats_cycles[stats]==0) || (cycleTime>stats_maxCycleTime[stats])) {
+      stats_maxCycleTime[stats] = cycleTime;
+    }
+    stats_totalCycleTime[stats] += cycleTime;
     // Calculate average current per solenoid
     int numSolenoids =
             ((code & CORR_T1)?1:0) +
@@ -693,7 +797,7 @@ void printCharacter(char ch)
     stats_cycles[stats]++;
   }
   // Debounce delay
-  checkDelay(10);
+  checkDelay(POST_SWITCH_DELAY);
 }
 
 boolean shifted()
@@ -704,14 +808,14 @@ boolean shifted()
 void shiftUp()
 {
   if (!shifted()) {
-    waitForC(SOL_UC,stats_uc,TO_UC_Start,TO_UC_Finish);
+    waitForC(SOL_UC,4,stats_uc,TO_UC_Start,TO_UC_Finish);
   }
 }
 
 void shiftDown()
 {
   if (shifted()) {
-    waitForC(SOL_LC,stats_lc,TO_LC_Start,TO_LC_Finish);
+    waitForC(SOL_LC,3,stats_lc,TO_LC_Start,TO_LC_Finish);
   }
 }
 
@@ -725,13 +829,13 @@ void printControl(int ch)
       atLeftColumn = false;
       // Fire SP solenoid
       if (!atEOL()) {
-        waitForC(SOL_SP,stats_sp,TO_SP_Start,TO_SP_Finish);
+        waitForC(SOL_SP,5,stats_sp,TO_SP_Start,TO_SP_Finish);
       }
       break;
     case 0x0d:
       if (!atLeftColumn) {
         // Fire CR solenoid
-        waitForC(SOL_CR,stats_cr,TO_CR_Start,TO_CR_Finish);
+        waitForC(SOL_CR,stats_cr,6,TO_CR_Start,TO_CR_Finish);
         atLeftColumn = true;
         justDoneReturn = true;
       }
@@ -744,7 +848,7 @@ void printControl(int ch)
         // Fire LF (Index) solenoid
         // Return does an index also, so ignore the first LF after a CR
         if (!justDoneReturn) {
-          waitForC(SOL_INDEX,stats_lf,TO_INDEX_Start,TO_INDEX_Finish);
+          waitForC(SOL_INDEX,6,stats_lf,TO_INDEX_Start,TO_INDEX_Finish);
         }
         else {
           justDoneReturn = false;
@@ -754,7 +858,7 @@ void printControl(int ch)
 #ifdef SOL_BSP      
     case 0x08:
         // Fire BSP solenoid
-        waitForC(SOL_BSP,-1,TO_BSP_Start,TO_BSP_Finish);
+        waitForC(SOL_BSP,5,-1,TO_BSP_Start,TO_BSP_Finish);
         break;
 #endif
 #ifdef SOL_TAB
@@ -762,7 +866,7 @@ void printControl(int ch)
         atLeftColumn = false;
         // Fire TAB solenoid
         if (!atEOL()) {
-          waitForC(SOL_TAB,-1,TO_TAB_Start,TO_TAB_Finish);
+          waitForC(SOL_TAB,5,-1,TO_TAB_Start,TO_TAB_Finish);
         }
         break;
 #endif        
@@ -791,19 +895,20 @@ void printControl(int ch)
     finish_to
       The number of milliseconds after firing the solenoid by which the operation contact should have gone inactive
 */
-int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish_to)
+int waitForC(int solenoid, int contact, int stats, unsigned long start_to, unsigned long finish_to)
 {
   float current;
   unsigned long start = millis();
+  unsigned long startCycle;
   unsigned long TO_1 = start + start_to;
   unsigned long TO_2 = start + finish_to;
   unsigned long time;
   
   // Wait for completion of previous cycle (C2-6 & C1 closed)
-  while ((digitalRead(C_C2_6_NC)==C_OPEN) || (digitalRead(C_C1_NC)==C_OPEN)) {
+  while (digitalRead(C_C2_6_NC)==C_OPEN) {
     checkSerial();
     if (millis()>TO_1) {
-      Serial.print("C1 and C2-6 not closed prior to printing @"); Serial.println(millis());
+      Serial.print("C2-6 not closed prior to printing @"); Serial.println(millis());
       if (stats>=0) {
         stats_finishTimeouts[stats]++;
         stats = -1;
@@ -814,13 +919,13 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
 
   digitalWrite(solenoid,SOL_ON);
   // Debounce delay
-  checkDelay(10);
+  checkDelay(POST_SWITCH_DELAY);
   
   // Wait for Control to start (C2-5)
   while (digitalRead(C_C2_6_NC)==C_CLOSED) {
     checkSerial();
     if (millis()>TO_1) {
-      Serial.print("Timed out waiting for C2-6 to open @"); Serial.println(millis());
+      Serial.print("Timed out waiting for C");Serial.print(contact);Serial.print(" to open @"); Serial.println(millis());
       if (stats>=0) {
         stats_startTimeouts[stats]++;
         stats = -1;
@@ -828,6 +933,7 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
       break;
     }
   }
+  startCycle = millis();
   if (stats>=0) {
     time = millis()-start;
     if ((stats_cycles[stats]==0) || (time<stats_minStartTime[stats])) {
@@ -847,13 +953,13 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
   // Turn off solenoid
   digitalWrite(solenoid,SOL_OFF);
   // Debounce delay
-  checkDelay(10);
+  checkDelay(POST_SWITCH_DELAY);
   
   // Wait for Control to finish (C2-6)
   while (digitalRead(C_C2_6_NC)==C_OPEN) {
     checkSerial();
     if (millis()>TO_2) {
-      Serial.print("Timed out waiting for C2-6 to close @"); Serial.println(millis());
+      Serial.print("Timed out waiting for C");Serial.print(contact);Serial.print(" to close @"); Serial.println(millis());
       if (stats>=0) {
         stats_finishTimeouts[stats]++;
         stats = -1;
@@ -861,19 +967,15 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
       break;
     }
   }
+  // Debounce delay
+  checkDelay(POST_SWITCH_DELAY);
   // For CR and TAB, wait for interlock to close
 #ifdef SOL_TAB
   if ((solenoid == SOL_CR) || (solenoid == SOL_TAB)) {
 #else
   if (solenoid == SOL_CR) {
 #endif    
-//    Serial.print("CRTABNC "); Serial.print(inputState(C_CRTAB_NC));
-//    Serial.print("CRTABNO "); Serial.print(inputState(C_CRTAB_NO));
-//    Serial.println();
-    checkDelay(10);
     while ((digitalRead(C_CRTAB_NC)==C_OPEN) || (digitalRead(C_CRTAB_NO)==C_CLOSED)) {
-//      Serial.print("CRTABNC "); Serial.print(inputState(C_CRTAB_NC));
-//      Serial.print("CRTABNO "); Serial.print(inputState(C_CRTAB_NO));
       checkSerial();
       if (millis()>TO_2) {
         Serial.print("Timed out waiting for Return or Tab @"); Serial.println(millis());
@@ -883,12 +985,12 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
         }
         break;
       }
+    checkDelay(POST_SWITCH_DELAY);
     }
-//    Serial.print("CRTABNC "); Serial.print(inputState(C_CRTAB_NC));
-//    Serial.print("CRTABNO "); Serial.print(inputState(C_CRTAB_NO));
   }
   if (stats>=0) {
     time = millis()-start;
+    unsigned long cycleTime = millis()-startCycle;
     if ((stats_cycles[stats]==0) || (time<stats_minFinishTime[stats])) {
       stats_minFinishTime[stats] = time;
     }
@@ -896,6 +998,13 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
       stats_maxFinishTime[stats] = time;
     }
     stats_totalFinishTime[stats] += time;
+    if ((stats_cycles[stats]==0) || (cycleTime<stats_minCycleTime[stats])) {
+      stats_minCycleTime[stats] = cycleTime;
+    }
+    if ((stats_cycles[stats]==0) || (cycleTime>stats_maxCycleTime[stats])) {
+      stats_maxCycleTime[stats] = cycleTime;
+    }
+    stats_totalCycleTime[stats] += cycleTime;
     if (locked()) {
       current -= stats_averageCurrent[stats_lock];
     }
@@ -912,7 +1021,7 @@ int waitForC(int solenoid, int stats, unsigned int start_to, unsigned int finish
  */
 void printStats()
 {
-  #define maxStatsStringLength 100
+  #define maxStatsStringLength 130
   char str[maxStatsStringLength];
   char num[10];
   str[0]='\0';
@@ -1049,10 +1158,19 @@ char* stats1(char* str, int stat) {
     strcat(str,"ms Max=");
     sprintf(num,"%3i",stats_maxFinishTime[stat]);
     strcat(str,num);
+    strcat(str,"ms C:Avg=");
+    sprintf(num,"%3i",stats_totalCycleTime[stat]/stats_cycles[stat]);
+    strcat(str,num);
+    strcat(str,"ms Min=");
+    sprintf(num,"%3i",stats_minCycleTime[stat]);
+    strcat(str,num);
+    strcat(str,"ms Max=");
+    sprintf(num,"%3i",stats_maxCycleTime[stat]);
+    strcat(str,num);
     strcat(str,"ms");
   }
   else {
-    strcat(str," S:(none) F:(none)");
+    strcat(str," S:(none) F:(none) C:(none)");
   }
   strcat(str," STO=");
   sprintf(num,"%3i",stats_startTimeouts[stat]);
@@ -1084,8 +1202,8 @@ void printChars(char* buff) {
 int inputBufferContents() {
   noInterrupts();
   int len = inputBufferInPtr - inputBufferOutPtr;
-  if (len<0) len+=INPUT_BUFFER_SIZE;
   interrupts();
+  if (len<0) len+=INPUT_BUFFER_SIZE;
   return len;
 }
 
@@ -1117,8 +1235,10 @@ char getFromInputBuffer() {
   To be called in all wait loops
  */
 void checkSerial() {
-  if (Serial1.available() && !inputBufferFull()) {
-    addToInputBuffer(Serial1.read());
+  while (Serial1.available() && !inputBufferFull()) {
+    if (!addToInputBuffer(Serial1.read())) {
+      Serial.println("Input buffer overrun");
+    }
   }
 }
 
