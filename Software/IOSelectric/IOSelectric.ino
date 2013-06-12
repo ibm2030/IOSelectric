@@ -1,6 +1,6 @@
 /*
   
-  I/O Selectric Serial Interface v1.2 2013-03-23
+  I/O Selectric Serial Interface v1.3 2013-06-06
   
   (c) 2013 L J Wilkinson
  
@@ -25,8 +25,6 @@
   
   The code uses the feedback contacts to maximise the rate at which
   printing occurs.
-  
-  No support for keyboard-to-serial yet.
   
   This file does not attempt to explain how you drive a Selectric,
   for this please refer to the various Selectric and I/O Selectric
@@ -56,9 +54,12 @@
   Add cycle time stats
   Add XON/XOFF and CTS/RTS handshaking
   
+  V1.3
+  Add keyboard support
+  
  */
-#define vers "v1.2"
-#define date "2013-03-23"
+#define vers "v1.3"
+#define date "2013-06-06"
 
 // Bit rate of Serial1 port (NOT the monitor port)
 #define externalPortRate 1200
@@ -79,17 +80,19 @@
 #define CTSRTS false
 
 // Whether to lock the keyboard while printing:
-#define LOCK_KEYBOARD true
+#define LOCK_KEYBOARD false
 
 // Whether to send Monitor typing to the typewriter
-#define LOCAL_MODE false
+#define LOCAL_MODE true
 
 // Whether to send Monitor typing down the serial link
 #define REMOTE_MODE true
 
-// Whether to treat the LF character as an EOL
+// Whether to treat an incoming LF character as an EOL
 #define TREAT_LF_AS_CR true
 
+// What to send when CR is pressed (0x0D or 0x04)
+#define CR_SEND_CHAR 0x04
 
 // Whether a long press on the status button should also print the stats
 // summary on the typewriter (as well as on the monitor)
@@ -234,11 +237,11 @@
 #define  CURRENT_RESISTOR 1.00
 
 // Hardware handshaking
-#define  CTS  50  // Out
-#define  RTS  51  // In
+#define  CTS  20  // Out
+#define  RTS  21  // In
 
 // A switch to use for debugging purposes
-#define  SW_STATUS  48
+#define  SW_STATUS  49
 #define  SW_OFF HIGH
 #define  SW_ON  LOW
 
@@ -277,10 +280,11 @@ byte correspondence[128] =
 0x00,0xbe,0x9c,0x00,0xd8,0xa5,0xdd,0x1c,0xf0,0xd4,0xfa,0xff,0x29,0x20,0x1a,0xdb, // 20-2F  !"#$%&'()*+,-./
 0x54,0x7f,0x7a,0x5b,0x75,0x7c,0x58,0x5d,0x79,0x70,0x8d,0x0d,0x00,0x2a,0x00,0xaa, // 30-3F 0123456789:;<=>?
 0xf5,0x99,0xc0,0xc9,0xed,0xcc,0x8b,0xaf,0xe4,0xb8,0x8e,0xe8,0xc5,0x9f,0xca,0x95, // 40-4F @ABCDEFGHIJKLMNO
-0xac,0x88,0xbd,0xb4,0xee,0xeb,0xbb,0x90,0xcf,0x84,0xde,0xff,0x00,0x7f,0x00,0xa0, // 50-5F PQRSTUVWXYZ[\]^_
+0xac,0x88,0xbd,0xb4,0xee,0xeb,0xbb,0x90,0xcf,0x84,0xde,0x00,0x00,0x00,0x00,0xa0, // 50-5F PQRSTUVWXYZ[\]^_
 0x3e,0x19,0x40,0x49,0x6d,0x4c,0x0b,0x2f,0x64,0x38,0x0e,0x68,0x45,0x1f,0x4a,0x15, // 60-6F `abcdefghijklmno
 0x2c,0x08,0x3d,0x34,0x6e,0x6b,0x3b,0x10,0x4f,0x04,0x5e,0x00,0x00,0x00,0x00,0x00  // 70-7F pqrstuvwxyz{|}~
 };
+byte keyb[256]; // This will be the inverse of the correspondence[] table
 
 /*
   Serial input buffering 
@@ -417,7 +421,9 @@ void setup() {
   
   analogReference(ANA_REF);
   
-  for (int i=0;i<INPUT_BUFFER_SIZE;i++) inputBuffer[i]='!';
+  for (int i=0;i<INPUT_BUFFER_SIZE;i++) inputBuffer[i]='!'; // Fill with guard characters
+  
+  for (int i=0;i<128;i++) keyb[correspondence[i]]=i; // Fill in inverse correspondence table
 
   Serial.print("I/O Selectric "); Serial.print(vers); Serial.print(" ");Serial.println(date);
 }
@@ -441,24 +447,32 @@ void loop() {
   // Check for input from console
   else if (Serial.available()) {
     char ch = Serial.read();
-#if REMOTE_MODE    
-    // Send to channel serial port
-#if CTSRTS
-    if (digitalRead(RTS)==HIGH) {
-      Serial1.write(ch);
+    if (ch=='{') {
+      displayInputs();
     }
+    else if (ch=='}') {
+      printStats();
+    }
+    else {
+#if REMOTE_MODE    
+      // Send to channel serial port
+#if CTSRTS
+      if (digitalRead(RTS)==HIGH) {
+        Serial1.write(ch);
+      }
 #else
-    Serial1.write(ch);
+      Serial1.write(ch);
 #endif   
 #endif   
 #if LOCAL_MODE  
-    // Use console as a typewriter:
-    lockKeyboard();
-    if (ch > 0x20)
-      printCharacter(ch);
-    else
-      printControl(ch);
+      // Use console as a typewriter:
+      lockKeyboard();
+      if (ch > 0x20)
+        printCharacter(ch);
+      else
+        printControl(ch);
 #endif      
+    }
   }
   else {
   // Nothing to do
@@ -500,6 +514,57 @@ void loop() {
     }
   #endif
   
+  // Check for keyboard data
+  if (digitalRead(C_C1_NO)!=C_OPEN) {
+    // Print cycle in progress - see what it is
+    int ch;
+    unsigned long TO_2 = millis() + TO_CHAR_Finish;
+
+    // code is SHIFT T2 CK T1 R2A R1 R2 R5
+    int code = shifted()?CORR_SHIFT:0;
+    if (digitalRead(K_T2 )!=K_OPEN  ) code |= CORR_T2;
+    if (digitalRead(K_CK )!=K_OPEN  ) code |= CORR_CK;
+    if (digitalRead(K_T1 )!=K_OPEN  ) code |= CORR_T1;
+    if (digitalRead(K_R2A)!=K_OPEN  ) code |= CORR_R2A;
+    if (digitalRead(K_R1 )!=K_OPEN  ) code |= CORR_R1;
+    if (digitalRead(K_R2 )!=K_OPEN  ) code |= CORR_R2;
+    if (digitalRead(K_R5 )!=K_OPEN  ) code |= CORR_R5;
+    if ((code != 0) && (ch = keyb[code])!=0) { 
+      keyboard(ch);
+      }
+    // Wait for print cycle to finish
+    while (digitalRead(C_C1_NO)!=C_OPEN) {
+      checkSerial();
+      if (millis()>TO_2) {
+          Serial.print("Timeout waiting for C1 to close after keypress "); Serial.println(millis());
+          break;
+        }
+      }
+    checkDelay(POST_SWITCH_DELAY);
+    }
+  
+  if (digitalRead(C_C2_6_NO)!=C_OPEN) {
+    // Print cycle in progress - see what it is
+    unsigned long TO_2 = millis() + TO_CHAR_Finish;
+
+    if (digitalRead(K_SP )==K_CLOSED) { keyboard(0x20); }
+    else if (digitalRead(K_CR )==K_CLOSED) { keyboard(CR_SEND_CHAR); }
+    else if (digitalRead(K_TAB)==K_CLOSED) { keyboard(0x09); }
+    else if (digitalRead(K_BSP)==K_CLOSED) { keyboard(0x08); }
+    else if (digitalRead(K_LF )==K_CLOSED) { keyboard(0x0a); }
+    else return;
+    // Cycle could also be Shift Up or Shift Down    
+    // Wait for print cycle to finish
+    while (digitalRead(C_C2_6_NO)!=C_OPEN) {
+      checkSerial();
+      if (millis()>TO_2) {
+          Serial.print("Timeout waiting for C2-6 to close after operation "); Serial.println(millis());
+          break;
+        }
+      }
+    checkDelay(POST_SWITCH_DELAY);
+    }
+
   // Check for status printout request
   if (digitalRead(SW_STATUS)==SW_ON) {
     if (!statusSwitchPressed) {
@@ -541,7 +606,7 @@ void lockKeyboard() {
   int stats = stats_lock;
   unsigned long start = millis();
   unsigned long TO = start + TO_LOCK;
-  if (locked())
+  if (locked() or !LOCK_KEYBOARD)
     return;
   digitalWrite(SOL_LOCK,SOL_ON);
   while (!locked()) {
@@ -578,7 +643,7 @@ void unlockKeyboard() {
   int stats = stats_lock;
   unsigned long start = millis();
   int TO = start + TO_UNLOCK;
-  if (!locked())
+  if (!locked() or !LOCK_KEYBOARD)
     return;
   digitalWrite(SOL_LOCK,SOL_OFF);
   while (locked()) {
@@ -610,7 +675,7 @@ void unlockKeyboard() {
   Check for keyboard locked
  */
 boolean locked() {
-    return (digitalRead(C_LOCK_NC)==C_OPEN);
+    return (digitalRead(C_LOCK_NO)==C_CLOSED);
 }
 
 /*
@@ -659,7 +724,7 @@ void printCharacter(char ch)
     checkSerial();
     if (millis()>TO_1) {
       if (stats>=0) {
-        Serial.print("Timeout waiting for C2 n to close prior to printing @"); Serial.println(millis());
+        Serial.print("Timeout waiting for C2 to close prior to printing @"); Serial.println(millis());
         if (stats>=0) {
           stats_finishTimeouts[stats]++;
           stats = -1;
@@ -1013,6 +1078,18 @@ int waitForC(int solenoid, int contact, int stats, unsigned long start_to, unsig
   }
 }
 
+/* Handle a character typed on the keyboard */
+/* Normally send it to the Serial1 port */
+void keyboard(int ch)
+{
+  Serial1.write(ch);
+  if (ch>=' ') Serial.write(ch);
+  else if (ch==CR_SEND_CHAR) Serial.println();
+  else if (ch==0x08) Serial.print("<BS>");
+  else if (ch==0x09) Serial.print("<TAB>");
+  else if (ch==0x0a) Serial.print("<LF>");
+}
+
 /*
   Print out a statistics summary showing the number of characters printed,
   number of CRs, LFs, shift and lock actuations
@@ -1140,37 +1217,30 @@ char* stats1(char* str, int stat) {
   sprintf(num,"%6i",stats_cycles[stat]);
   strcat(str,num);
   if (stats_cycles[stat]>0) {
-    strcat(str," S:Avg=");
-    sprintf(num,"%3i",stats_totalStartTime[stat]/stats_cycles[stat]);
+    strcat(str," S:");
+    sprintf(num,"%3i-",stats_minStartTime[stat]);
     strcat(str,num);
-    strcat(str,"ms Min=");
-    sprintf(num,"%3i",stats_minStartTime[stat]);
+    sprintf(num,"%3i-",stats_totalStartTime[stat]/stats_cycles[stat]);
     strcat(str,num);
-    strcat(str,"ms Max=");
     sprintf(num,"%3i",stats_maxStartTime[stat]);
     strcat(str,num);
-    strcat(str,"ms F:Avg=");
-    sprintf(num,"%3i",stats_totalFinishTime[stat]/stats_cycles[stat]);
+    strcat(str," F:");
+    sprintf(num,"%3i-",stats_minFinishTime[stat]);
     strcat(str,num);
-    strcat(str,"ms Min=");
-    sprintf(num,"%3i",stats_minFinishTime[stat]);
+    sprintf(num,"%3i-",stats_totalFinishTime[stat]/stats_cycles[stat]);
     strcat(str,num);
-    strcat(str,"ms Max=");
     sprintf(num,"%3i",stats_maxFinishTime[stat]);
     strcat(str,num);
-    strcat(str,"ms C:Avg=");
-    sprintf(num,"%3i",stats_totalCycleTime[stat]/stats_cycles[stat]);
+    strcat(str," C:");
+    sprintf(num,"%3i-",stats_minCycleTime[stat]);
     strcat(str,num);
-    strcat(str,"ms Min=");
-    sprintf(num,"%3i",stats_minCycleTime[stat]);
+    sprintf(num,"%3i-",stats_totalCycleTime[stat]/stats_cycles[stat]);
     strcat(str,num);
-    strcat(str,"ms Max=");
     sprintf(num,"%3i",stats_maxCycleTime[stat]);
     strcat(str,num);
-    strcat(str,"ms");
   }
   else {
-    strcat(str," S:(none) F:(none) C:(none)");
+    strcat(str," S:   -   -    F:   -   -    C:   -   -   ");
   }
   strcat(str," STO=");
   sprintf(num,"%3i",stats_startTimeouts[stat]);
