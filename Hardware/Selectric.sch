@@ -11262,16 +11262,6 @@ Lawrence Wilkinson (Selectric)</text>
 <junction x="160.02" y="139.7"/>
 </segment>
 </net>
-<net name="VCC" class="1">
-<segment>
-<label x="210.82" y="144.78" size="1.778" layer="95"/>
-<pinref part="DC1" gate="G$1" pin="+VOUT"/>
-<wire x1="208.28" y1="144.78" x2="215.9" y2="144.78" width="0.1524" layer="91"/>
-<wire x1="215.9" y1="144.78" x2="215.9" y2="147.32" width="0.1524" layer="91"/>
-<pinref part="IC1" gate="P" pin="VCC"/>
-<wire x1="215.9" y1="147.32" x2="223.52" y2="147.32" width="0.1524" layer="91"/>
-</segment>
-</net>
 <net name="N$42" class="1">
 <segment>
 <pinref part="F1" gate="G$1" pin="1"/>
@@ -11300,6 +11290,14 @@ Lawrence Wilkinson (Selectric)</text>
 <wire x1="99.06" y1="71.12" x2="96.52" y2="71.12" width="0.1524" layer="91"/>
 <label x="99.314" y="71.12" size="1.778" layer="95" rot="R180"/>
 <pinref part="JP10" gate="G$1" pin="3"/>
+</segment>
+<segment>
+<label x="210.82" y="144.78" size="1.778" layer="95"/>
+<pinref part="DC1" gate="G$1" pin="+VOUT"/>
+<wire x1="208.28" y1="144.78" x2="215.9" y2="144.78" width="0.1524" layer="91"/>
+<wire x1="215.9" y1="144.78" x2="215.9" y2="147.32" width="0.1524" layer="91"/>
+<pinref part="IC1" gate="P" pin="VCC"/>
+<wire x1="215.9" y1="147.32" x2="223.52" y2="147.32" width="0.1524" layer="91"/>
 </segment>
 </net>
 <net name="VIN" class="0">
