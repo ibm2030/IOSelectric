@@ -8820,6 +8820,22 @@ Source: &lt;a href="http://www.farnell.com/datasheets/13482.pdf"&gt;Data sheet&l
 <vertex x="-22.5425" y="5.8737"/>
 </polygon>
 </package>
+<package name="22-23-2041">
+<description>.100" (2.54mm) Center Header - 4 Pin</description>
+<wire x1="-5.08" y1="3.175" x2="5.08" y2="3.175" width="0.254" layer="21"/>
+<wire x1="5.08" y1="3.175" x2="5.08" y2="1.27" width="0.254" layer="21"/>
+<wire x1="5.08" y1="1.27" x2="5.08" y2="-3.175" width="0.254" layer="21"/>
+<wire x1="5.08" y1="-3.175" x2="-5.08" y2="-3.175" width="0.254" layer="21"/>
+<wire x1="-5.08" y1="-3.175" x2="-5.08" y2="1.27" width="0.254" layer="21"/>
+<wire x1="-5.08" y1="1.27" x2="-5.08" y2="3.175" width="0.254" layer="21"/>
+<wire x1="-5.08" y1="1.27" x2="5.08" y2="1.27" width="0.254" layer="21"/>
+<pad name="1" x="-3.81" y="0" drill="1" shape="long" rot="R90"/>
+<pad name="2" x="-1.27" y="0" drill="1" shape="long" rot="R90"/>
+<pad name="3" x="1.27" y="0" drill="1" shape="long" rot="R90"/>
+<pad name="4" x="3.81" y="0" drill="1" shape="long" rot="R90"/>
+<text x="-5.08" y="3.81" size="1.016" layer="25" ratio="10">&gt;NAME</text>
+<text x="-5.08" y="-5.08" size="1.016" layer="27" ratio="10">&gt;VALUE</text>
+</package>
 </packages>
 <symbols>
 <symbol name="MV">
@@ -8916,6 +8932,33 @@ wire to board 2.54 mm (0.100") pitch header</description>
 <attribute name="MPN" value="" constant="no"/>
 <attribute name="OC_FARNELL" value="unknown" constant="no"/>
 <attribute name="OC_NEWARK" value="unknown" constant="no"/>
+</technology>
+</technologies>
+</device>
+</devices>
+</deviceset>
+<deviceset name="22-23-2041" prefix="X">
+<description>.100" (2.54mm) Center Header - 4 Pin</description>
+<gates>
+<gate name="-1" symbol="MV" x="0" y="2.54" addlevel="always" swaplevel="1"/>
+<gate name="-2" symbol="M" x="0" y="0" addlevel="always" swaplevel="1"/>
+<gate name="-3" symbol="M" x="0" y="-2.54" addlevel="always" swaplevel="1"/>
+<gate name="-4" symbol="M" x="0" y="-5.08" addlevel="always" swaplevel="1"/>
+</gates>
+<devices>
+<device name="" package="22-23-2041">
+<connects>
+<connect gate="-1" pin="S" pad="1"/>
+<connect gate="-2" pin="S" pad="2"/>
+<connect gate="-3" pin="S" pad="3"/>
+<connect gate="-4" pin="S" pad="4"/>
+</connects>
+<technologies>
+<technology name="">
+<attribute name="MF" value="MOLEX" constant="no"/>
+<attribute name="MPN" value="22-23-2041" constant="no"/>
+<attribute name="OC_FARNELL" value="1462920" constant="no"/>
+<attribute name="OC_NEWARK" value="38C0355" constant="no"/>
 </technology>
 </technologies>
 </device>
@@ -9633,6 +9676,9 @@ Source: Allegro Microsystems Inc. / UDN2981-UDN2984.pdf</description>
 <part name="IC3" library="uln-udn" deviceset="UDN298*" device="SLW" technology="2"/>
 <part name="R2" library="rcl" deviceset="R-EU_" device="M1206" value="10R"/>
 <part name="R1" library="rcl" deviceset="R-EU_" device="M1206" value="10R"/>
+<part name="J2" library="con-molex" deviceset="22-23-2041" device=""/>
+<part name="R3" library="rcl" deviceset="R-EU_" device="M1206" value="220R"/>
+<part name="R4" library="rcl" deviceset="R-EU_" device="M1206" value="220R"/>
 </parts>
 <sheets>
 <sheet>
@@ -10029,6 +10075,60 @@ Lawrence Wilkinson (Selectric)</text>
 </sheet>
 <sheet>
 <plain>
+<text x="147.32" y="137.16" size="1.778" layer="91">Solenoid Outputs
+D2 LOCK
+D3
+D4
+D5
+D6
+D7
+D8
+D9
+D10
+D11
+D12
+D22
+D23
+D24</text>
+<text x="185.42" y="167.64" size="1.778" layer="91">Other Outputs
+D1 TXD
+D16 RTS
+D53 LED</text>
+<text x="147.32" y="78.74" size="1.778" layer="91">Printer Switch Inputs
+D26
+D27
+D28
+D29
+D30
+D31
+D32
+D33
+D34
+D35
+D36
+D37</text>
+<text x="210.82" y="66.04" size="1.778" layer="91">Keyboard Inputs
+D38
+D39
+D40
+D41
+D42
+D43
+D44
+D45
+D46
+D47
+D48
+D49
+D50
+D51</text>
+<text x="147.32" y="66.04" size="1.778" layer="91">Other Inputs
+D0 RXD
+D17 CTS
+D52 Switch</text>
+<text x="147.32" y="50.8" size="1.778" layer="91">Analogue Inputs
+A0 HSDRET
+A1 HSDGND</text>
 </plain>
 <instances>
 <instance part="SV2" gate="G$1" x="55.88" y="142.24" rot="R180"/>
@@ -10062,6 +10162,12 @@ Lawrence Wilkinson (Selectric)</text>
 <instance part="FRAME1" gate="G$2" x="147.32" y="0"/>
 <instance part="JP8" gate="G$1" x="55.88" y="81.28"/>
 <instance part="JP9" gate="G$1" x="55.88" y="78.74" rot="R180"/>
+<instance part="J2" gate="-1" x="60.96" y="35.56"/>
+<instance part="J2" gate="-2" x="60.96" y="30.48"/>
+<instance part="J2" gate="-3" x="60.96" y="25.4"/>
+<instance part="J2" gate="-4" x="60.96" y="20.32"/>
+<instance part="R3" gate="G$1" x="27.94" y="30.48"/>
+<instance part="R4" gate="G$1" x="27.94" y="20.32"/>
 </instances>
 <busses>
 </busses>
@@ -10513,6 +10619,11 @@ Lawrence Wilkinson (Selectric)</text>
 <junction x="93.98" y="132.08"/>
 <junction x="93.98" y="129.54"/>
 </segment>
+<segment>
+<pinref part="R3" gate="G$1" pin="1"/>
+<wire x1="10.16" y1="30.48" x2="22.86" y2="30.48" width="0.1524" layer="91"/>
+<label x="10.16" y="30.48" size="1.778" layer="95"/>
+</segment>
 </net>
 <net name="D22" class="0">
 <segment>
@@ -10530,9 +10641,16 @@ Lawrence Wilkinson (Selectric)</text>
 </net>
 <net name="D52" class="0">
 <segment>
-<wire x1="43.18" y1="60.96" x2="45.72" y2="60.96" width="0.1524" layer="91"/>
-<label x="42.672" y="62.484" size="1.778" layer="95" rot="R180"/>
+<label x="37.592" y="59.944" size="1.778" layer="95" rot="R180"/>
 <pinref part="JP9" gate="G$1" pin="16"/>
+<pinref part="R3" gate="G$1" pin="2"/>
+<pinref part="J2" gate="-2" pin="S"/>
+<wire x1="33.02" y1="30.48" x2="38.1" y2="30.48" width="0.1524" layer="91"/>
+<label x="45.72" y="30.48" size="1.778" layer="95"/>
+<wire x1="38.1" y1="30.48" x2="58.42" y2="30.48" width="0.1524" layer="91"/>
+<wire x1="45.72" y1="60.96" x2="38.1" y2="60.96" width="0.1524" layer="91"/>
+<wire x1="38.1" y1="60.96" x2="38.1" y2="30.48" width="0.1524" layer="91"/>
+<junction x="38.1" y="30.48"/>
 </segment>
 </net>
 <net name="D25" class="0">
@@ -10548,12 +10666,39 @@ Lawrence Wilkinson (Selectric)</text>
 <label x="74.168" y="61.976" size="1.778" layer="95" rot="R180"/>
 <pinref part="JP8" gate="G$1" pin="1"/>
 </segment>
+<segment>
+<pinref part="R4" gate="G$1" pin="1"/>
+<wire x1="10.16" y1="20.32" x2="22.86" y2="20.32" width="0.1524" layer="91"/>
+<label x="10.16" y="20.32" size="1.778" layer="95"/>
+</segment>
 </net>
 <net name="D23" class="0">
 <segment>
 <wire x1="66.04" y1="99.06" x2="68.58" y2="99.06" width="0.1524" layer="91"/>
 <label x="74.168" y="99.822" size="1.778" layer="95" rot="R180"/>
 <pinref part="JP8" gate="G$1" pin="16"/>
+</segment>
+</net>
+<net name="GND" class="1">
+<segment>
+<pinref part="J2" gate="-1" pin="S"/>
+<wire x1="45.72" y1="35.56" x2="58.42" y2="35.56" width="0.1524" layer="91"/>
+<label x="45.72" y="35.56" size="1.778" layer="95"/>
+<junction x="58.42" y="35.56"/>
+</segment>
+<segment>
+<wire x1="45.72" y1="25.4" x2="58.42" y2="25.4" width="0.1524" layer="91"/>
+<label x="45.72" y="25.4" size="1.778" layer="95"/>
+<pinref part="J2" gate="-3" pin="S"/>
+<junction x="58.42" y="25.4"/>
+</segment>
+</net>
+<net name="LED+" class="0">
+<segment>
+<pinref part="R4" gate="G$1" pin="2"/>
+<pinref part="J2" gate="-4" pin="S"/>
+<wire x1="33.02" y1="20.32" x2="58.42" y2="20.32" width="0.1524" layer="91"/>
+<label x="45.72" y="20.32" size="1.778" layer="95"/>
 </segment>
 </net>
 </nets>
@@ -10852,7 +10997,7 @@ Lawrence Wilkinson (Selectric)</text>
 <pinref part="JP10" gate="G$1" pin="2"/>
 </segment>
 </net>
-<net name="5V" class="0">
+<net name="VCC" class="1">
 <segment>
 <wire x1="99.06" y1="71.12" x2="96.52" y2="71.12" width="0.1524" layer="91"/>
 <label x="99.314" y="71.12" size="1.778" layer="95" rot="R180"/>
