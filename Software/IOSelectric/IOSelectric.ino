@@ -1,8 +1,8 @@
 /*
   
-  I/O Selectric Serial Interface v1.31 2013-07-10
+  I/O Selectric Serial Interface v1.32 2019-06-08
   
-  (c) 2013 L J Wilkinson
+  (c) 2013-2019 L J Wilkinson
  
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -65,9 +65,12 @@
   Allow correct keyboard operation when LOCK not used
   Compact stats printout, fix printChars()
   
+  V1.32 2019-06-08
+  Assign I/O for PCB as designed and ordered
+  
  */
-#define vers "v1.31"
-#define date "2013-07-10"
+#define vers "v1.32"
+#define date "2019-06-08"
 
 // Bit rate of Serial1 port (NOT the monitor port)
 #define externalPortRate 9600
@@ -126,21 +129,21 @@
         for the Backspace and Tab functions.  SOL_BSP can be used for overtyping, but
         SOL_TAB would probably not be used on a printer.
 */
-#define  SOL_T2    16 // A
-#define  SOL_CK    15 // B
-#define  SOL_T1    14 // C
-#define  SOL_R2A    2 // D
-#define  SOL_R1     3 // E
-#define  SOL_R2     4 // F
-#define  SOL_R5     5 // H
-#define  SOL_LOCK   6 // K
-#define  SOL_TAB    7 // L
-#define  SOL_SP     8 // M
-#define  SOL_BSP    9 // N
-#define  SOL_CR    10 // P
-#define  SOL_INDEX 11 // R
-#define  SOL_UC    12 // S
-#define  SOL_LC    13 // T
+#define  SOL_T2     7 // A
+#define  SOL_CK     9 // B
+#define  SOL_T1     8 // C
+#define  SOL_R2A    3 // D
+#define  SOL_R1     4 // E
+#define  SOL_R2     5 // F
+#define  SOL_R5     6 // H
+#define  SOL_LOCK   2 // K
+#define  SOL_TAB   10 // L
+#define  SOL_SP    11 // M
+#define  SOL_BSP   12 // N
+#define  SOL_CR    13 // P
+#define  SOL_INDEX 22 // R
+#define  SOL_UC    23 // S
+#define  SOL_LC    24 // T
 // Output 17 is reserved for an additional solenoid (perhaps ribbon control)
 #define  SOL_ON   HIGH
 #define  SOL_OFF  LOW
@@ -181,18 +184,18 @@
   (Note: Pin X,d & y are grounded, so switches go Low when closed)
 */
 
-#define  C_C1_NC    22 // W
-#define  C_CRTAB_NC 23 // Y
-#define  C_LC       24 // Z
-#define  C_C2_6_NC  25 // a
-#define  C_C2_6_NO  26 // b
-#define  C_CRTAB_NO 27 // c
-#define  C_EOL_NC   28 // e
-#define  C_EOL_NO   29 // f
-#define  C_UC       30 // h
-#define  C_LOCK_NC  31 // k
-#define  C_LOCK_NO  32 // m
-#define  C_C1_NO    33 // n
+#define  C_C1_NC    26 // W
+#define  C_CRTAB_NC 27 // Y
+#define  C_LC       28 // Z
+#define  C_C2_6_NC  29 // a
+#define  C_C2_6_NO  30 // b
+#define  C_CRTAB_NO 31 // c
+#define  C_EOL_NC   32 // e
+#define  C_EOL_NO   33 // f
+#define  C_UC       34 // h
+#define  C_LOCK_NC  35 // k
+#define  C_LOCK_NO  36 // m
+#define  C_C1_NO    37 // n
 
 #define  C_OPEN    HIGH
 #define  C_CLOSED  LOW
@@ -211,21 +214,21 @@
   Keyboard input definitions:
   (These are not used in this version)
 */
-#define  K_PAR   34 // p
-#define  K_T2    35 // r
-#define  K_CK    36 // s
-#define  K_T1    37 // t
-#define  K_R2A   38 // u
-#define  K_R1    39 // v
-#define  K_R2    40 // w
-#define  K_R5    41 // x
-#define  K_TAB   42 // z
-#define  K_SP    43 // AA
-#define  K_BSP   44 // BB
-#define  K_CR    45 // CC
-#define  K_LF    46 // DD
-#define  K_UC    47 // EE
-#define  K_LC    48 // FF
+#define  K_PAR   38 // p
+#define  K_T2    39 // r
+#define  K_CK    40 // s
+#define  K_T1    41 // t
+#define  K_R2A   42 // u
+#define  K_R1    43 // v
+#define  K_R2    44 // w
+#define  K_R5    45 // x
+#define  K_TAB   46 // z
+#define  K_SP    47 // AA
+#define  K_BSP   48 // BB
+#define  K_CR    49 // CC
+#define  K_LF    50 // DD
+#define  K_UC    51 // EE
+#define  K_LC    52 // FF
 
 #define K_OPEN    HIGH
 #define K_CLOSED  LOW
@@ -258,13 +261,16 @@
 #define  CURRENT_RESISTOR 1.00
 
 // Hardware handshaking
-#define  CTS  20  // Out
-#define  RTS  21  // In
+#define  CTS  17  // Out
+#define  RTS  16  // In
 
 // A switch to use for debugging purposes
-#define  SW_STATUS  49
+#define  SW_STATUS  25
 #define  SW_OFF HIGH
 #define  SW_ON  LOW
+
+// A LED or other output
+#define LED 53
 
 /*
   Type Element definitions, ASCII to Tilt/Rotate (Correspondence code)

@@ -1,0 +1,63 @@
+Partlist exported from /home/ljw/Documents/eagle/Selectric/Selectric.sch at 8/06/19 9:33 PM
+
+Part  Value           Device          Package        Description                                      MF              MPN             OC_FARNELL OC_NEWARK
+C1    100n            C-EUC0603       C0603          CAPACITOR, European symbol                                                                           
+C2    100n            C-EUC0603       C0603          CAPACITOR, European symbol                                                                           
+C3    100n            C-EUC0603       C0603          CAPACITOR, European symbol                                                                           
+C4    100n            C-EUC0603       C0603          CAPACITOR, European symbol                                                                           
+D1    1N4004          1N4004          DO41-10        DIODE                                                                                                
+DC1   TMR1-4811       TMR1-4811       TRACO_SIP-8                                                     TRACO           TMR1-4811                           
+F1    SMD100F         SMD100F         SMD050F        PolySwitch (TM) Resettable Device                Schurter        3404.0009.11                        
+HSD1A                 2,15/1,0        2,15/1,0       THROUGH-HOLE PAD                                                                                     
+IC1   UDN2982SLW      UDN2982SLW      SO20W          DRIVER ARRAY                                     Allegro         UDN2982SLW                          
+IC2   UDN2982SLW      UDN2982SLW      SO20W          DRIVER ARRAY                                     Allegro         UDN2982SLW                          
+IC3   MAX3232ESE      MAX3232ESE      SO16           True RS-232 Transceivers 3.0V to 5.5V, Low-Power MAXIM           MAX3232CSE      9725539    79C3880  
+J1                    DCJ0303         DCJ0303        DC POWER JACK                                                                    unknown    unknown  
+JP1   M16LOCK         M16LOCK         1X16_LOCK                                                       WURTH           61301611121                         
+JP2   M16LOCK         M16LOCK         1X16_LOCK                                                       WURTH           61301611121                         
+JP3                   M02LOCK         1X02_LOCK      Header 2                                                                                             
+JP4                   M02LOCK         1X02_LOCK      Header 2                                                                                             
+JP5                   M06LOCK         1X06_LOCK      Header 6                                         TE CONNECTIVITY 826629-6                            
+JP6                   M08LOCK         1X08_LOCK      Header 8                                         TE CONNECTIVITY 826629-8                            
+JP7                   PINHD-2X2       2X02           PIN HEADER                                       TE CONNECTIVITY 826632-2                            
+JP8                   M08LOCK         1X08_LOCK      Header 8                                         TE CONNECTIVITY 826629-8                            
+JP9                   M08LOCK         1X08_LOCK      Header 8                                         TE CONNECTIVITY 826629-8                            
+JP10                  M08LOCK         1X08_LOCK      Header 8                                         TE CONNECTIVITY 826629-8                            
+JP11                  M08LOCK         1X08_LOCK      Header 8                                         TE CONNECTIVITY 826629-8                            
+R1    10R             R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R2    10R             R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R3    1R0             R-EU_0922/22    0922/22        RESISTOR, European symbol                                                                            
+R4    1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R5    1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R6    1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R7    1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R8    1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R9    1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R10   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R11   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R12   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R13   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R14   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R15   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R16   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R17   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R18   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R19   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R20   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R21   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R22   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R23   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R24   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R25   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R26   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R27   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R28   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R29   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R30   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R31   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R32   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+R33   1K              R-EU_M1206      M1206          RESISTOR, European symbol                                                                            
+X1    2530-           2530-           PAK100/2500-30 3M (TM) Pak 100 4-Wall Header                    3M              PAK100/2500-30  1788688    unknown  
+X2    22-23-2041      22-23-2041      22-23-2041     .100" (2.54mm) Center Header - 4 Pin             TE CONNECTIVITY 280371-2        1462920    38C0355  
+X3                    F09HP           F09HP          SUB-D                                            Amphenol        FCE17-E09PA-490 unknown    unknown  
+X4    C-GRID-16-70543 C-GRID-16-70543 70543-16       CONNECTOR                                                                        unknown    unknown  
