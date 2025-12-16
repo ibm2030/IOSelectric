@@ -737,7 +737,7 @@ void printCharacter(char ch)
   // Check for shift change
   // "." and "," are repeated on both UC and LC so no need to check shift for these
   // This may not be the case for all type elements
-  if ((code!=0x1a)|| (code!=0x29)) {
+  if ((code!=0x1a) && (code!=0x29)) {
     if ((code & CORR_SHIFT)!=0) {
       shiftUp();
     }
