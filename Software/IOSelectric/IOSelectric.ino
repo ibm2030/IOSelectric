@@ -69,8 +69,8 @@
   Assign I/O for PCB as designed and ordered
   
  */
-#define vers "v1.32"
-#define date "2019-06-08"
+#define vers "v1.33"
+#define date "2025-12-16"
 
 // Bit rate of Serial1 port (NOT the monitor port)
 #define externalPortRate 9600
@@ -673,7 +673,7 @@ void lockKeyboard() {
 void unlockKeyboard() {
   int stats = stats_lock;
   unsigned long start = millis();
-  int TO = start + TO_UNLOCK;
+  unsigned long TO = start + TO_UNLOCK;
   keyboardLocked = false;
   if (!locked() or !LOCK_KEYBOARD)
     return;
@@ -838,7 +838,6 @@ void printCharacter(char ch)
         stats_finishTimeouts[stats]++;
         stats = -1;
       }
-      while (true) ;
       break;
     }
     if (digitalRead(C_C2_6_NC)==C_CLOSED) {
@@ -1380,7 +1379,7 @@ void checkSerial() {
  */
 void checkDelay(int del)
 {
-  for (int i=del; i--; i>0) {
+  for (int i=del; i>0; i++) {
     delay(1);
     checkSerial();
   }
@@ -1402,7 +1401,7 @@ void displayInputs() {
   strcat(str,"LC     "); strcat(str,inputState(C_LC));
   strcat(str,"UC     "); strcat(str,inputState(C_UC));
   strcat(str,"EOL_NC "); strcat(str,inputState(C_EOL_NC));
-  strcat(str,"EOL_NC "); strcat(str,inputState(C_EOL_NO));
+  strcat(str,"EOL_NO "); strcat(str,inputState(C_EOL_NO));
   strcat(str,"LOCK_NC"); strcat(str,inputState(C_LOCK_NC));
   strcat(str,"LOCK_NO"); strcat(str,inputState(C_LOCK_NO));
   
